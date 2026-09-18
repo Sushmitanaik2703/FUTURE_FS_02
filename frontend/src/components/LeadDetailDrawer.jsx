@@ -29,7 +29,7 @@ const LeadDetailDrawer = ({
     e.preventDefault();
     if (!noteText.trim()) return;
     setAddingNote(true);
-    await onAddNote(lead.id, noteText);
+    await onAddNote(lead._id, noteText);
     setNoteText('');
     setAddingNote(false);
   };
@@ -47,17 +47,17 @@ const LeadDetailDrawer = ({
   };
 
   const getActivityIcon = (type) => {
-    switch (type) {
-      case 'CREATED':
-        return <User className="w-4 h-4 text-blue-400" />;
-      case 'STATUS_CHANGE':
-        return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
-      case 'NOTE_ADDED':
-        return <MessageSquare className="w-4 h-4 text-indigo-400" />;
-      default:
-        return <Clock className="w-4 h-4 text-slate-400" />;
-    }
-  };
+  switch (type) {
+    case 'created':
+      return <User className="w-4 h-4 text-blue-400" />;
+    case 'status':
+      return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+    case 'note':
+      return <MessageSquare className="w-4 h-4 text-indigo-400" />;
+    default:
+      return <Clock className="w-4 h-4 text-slate-400" />;
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/70 backdrop-blur-sm animate-fade-in flex justify-end">
@@ -79,7 +79,7 @@ const LeadDetailDrawer = ({
                 {lead.status}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Lead ID: #{lead.id} • Source: {lead.source || 'Website'}</p>
+            <p className="text-xs text-slate-400 mt-1">Lead ID: #{lead._id} • Source: {lead.source || 'Website'}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ const LeadDetailDrawer = ({
               <span className="text-slate-500 font-semibold block mb-1">Received Date</span>
               <span className="text-slate-200 flex items-center gap-1.5 font-medium">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                {formatDate(lead.created_at)}
+                {formatDate(lead.createdAt)}
               </span>
             </div>
 
@@ -153,7 +153,7 @@ const LeadDetailDrawer = ({
                 return (
                   <button
                     key={st}
-                    onClick={() => onUpdateStatus(lead.id, st)}
+                    onClick={() => onUpdateStatus(lead._id, st)}
                     className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border text-center ${
                       isCurrent
                         ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/30'
@@ -166,7 +166,7 @@ const LeadDetailDrawer = ({
               })}
 
               <button
-                onClick={() => onUpdateStatus(lead.id, 'LOST')}
+                onClick={() => onUpdateStatus(lead._id, 'LOST')}
                 className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border text-center ${
                   lead.status === 'LOST'
                     ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/30'
@@ -214,19 +214,19 @@ const LeadDetailDrawer = ({
             ) : (
               <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
                 {activities.map((act) => (
-                  <div key={act.id} className="relative group">
+  <div key={act._id} className="relative group">
                     {/* Circle marker */}
                     <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center">
-                      {getActivityIcon(act.activity_type)}
+                      {getActivityIcon(act.type)}
                     </div>
 
                     <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-colors">
                       <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                        <span className="font-semibold text-slate-300">{act.created_by || 'System'}</span>
-                        <span>{formatDate(act.created_at)}</span>
+                        <span className="font-semibold text-slate-300">System</span>
+<span>{formatDate(act.createdAt)}</span>
                       </div>
                       <p className="text-xs text-slate-200 leading-relaxed font-medium">
-                        {act.description}
+                        {act.note || act.details}
                       </p>
                     </div>
                   </div>

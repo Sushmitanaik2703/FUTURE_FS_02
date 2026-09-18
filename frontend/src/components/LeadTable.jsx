@@ -129,7 +129,7 @@ const LeadTable = ({
                 const badge = statusBadges[lead.status] || statusBadges.NEW;
                 return (
                   <tr
-                    key={lead.id}
+                    key={lead._id}
                     onClick={() => onSelectLead(lead)}
                     className="hover:bg-slate-800/40 cursor-pointer transition-colors group"
                   >
@@ -177,7 +177,7 @@ const LeadTable = ({
                     <td className="py-4 px-4 text-slate-400">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                        {formatDate(lead.created_at)}
+                        {formatDate(lead.createdAt)}
                       </span>
                     </td>
 

@@ -18,10 +18,8 @@ const Login = ({ onLoginSuccess }) => {
 
     try {
       const res = await authAPI.login({ email, password });
-      if (res.data.success) {
-        login(res.data.token, res.data.user);
-        if (onLoginSuccess) onLoginSuccess();
-      }
+      login(res.data.token, res.data.user);
+if (onLoginSuccess) onLoginSuccess();
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid credentials or server error.');
     } finally {

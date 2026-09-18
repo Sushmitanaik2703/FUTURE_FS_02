@@ -12,7 +12,7 @@ When potential clients fill out a contact form on a business website, businesses
 3. **Log** follow-up notes and record an audit timeline of all client interactions.
 4. **Analyze** conversion metrics and export client records.
 
-This project delivers an end-to-end, commercial-grade Mini CRM solution with a modern Express backend, SQLite database, and React frontend.
+This project delivers an end-to-end Mini CRM solution with a modern Express backend, MongoDB database, and React frontend.
 
 ---
 
@@ -37,7 +37,7 @@ This project delivers an end-to-end, commercial-grade Mini CRM solution with a m
 | **Frontend** | React 18 + Vite | Modern, high-performance Single Page Application |
 | **Styling** | Tailwind CSS + Lucide React | Modern dark/glassmorphic design system with icons |
 | **Backend** | Node.js + Express.js | RESTful API server |
-| **Database** | SQLite3 | File-based relational database with promisified helpers |
+| **Database** | MongoDB | NoSQL database managed using Mongoose |
 | **Auth & Security** | JWT + bcryptjs + express-rate-limit | Token auth, password encryption, and API rate limiting |
 
 ---
@@ -48,7 +48,7 @@ This project delivers an end-to-end, commercial-grade Mini CRM solution with a m
 client-lead-crm/
 ├── backend/
 │   ├── src/
-│   │   ├── config/database.js       # SQLite connection & schema migrations
+│   │   ├── │config/database.js       # MongoDB/Mongoose database connection
 │   │   ├── middleware/
 │   │   │   ├── auth.middleware.js   # JWT verification
 │   │   │   ├── validate.middleware.js # Form & input validation

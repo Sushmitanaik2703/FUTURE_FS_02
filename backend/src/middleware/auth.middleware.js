@@ -1,20 +1,35 @@
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Access denied. Authentication token required.' });
-  }
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super-secret-mini-crm-key-2026');
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== "admin") {
+      return res.status(403).json({
+        message: "Admin access required",
+      });
+    }
+
     req.user = decoded;
+
     next();
   } catch (error) {
-    return res.status(403).json({ success: false, error: 'Invalid or expired token.' });
+    return res.status(401).json({
+      message: "Invalid or expired authentication token",
+    });
   }
 };
 
-module.exports = { authenticateToken };
+module.exports = {
+  authenticateToken,
+};

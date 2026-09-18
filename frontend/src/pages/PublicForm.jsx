@@ -22,10 +22,17 @@ const PublicForm = ({ onBackToDashboard }) => {
 
     try {
       const res = await publicAPI.submitContactForm({ ...formData, source: 'Website Form' });
-      if (res.data.success) {
-        setSuccessMsg(res.data.message || 'Thank you! Your lead has been submitted to the CRM.');
-        setFormData({ name: '', email: '', phone: '', company: '', message: '' });
-      }
+      setSuccessMsg(
+  res.data.message || 'Thank you! Your lead has been submitted to the CRM.'
+);
+
+setFormData({
+  name: '',
+  email: '',
+  phone: '',
+  company: '',
+  message: ''
+});
     } catch (err) {
       if (err.response?.data?.errors) {
         setErrorMsg(err.response.data.errors.join(' '));

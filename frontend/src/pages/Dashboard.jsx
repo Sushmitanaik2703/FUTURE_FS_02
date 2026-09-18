@@ -34,31 +34,29 @@ const Dashboard = () => {
     setToast({ message, type });
   };
 
-  const fetchLeads = async () => {
-    try {
-      const res = await leadAPI.getAll({
-        search: search || undefined,
-        status: statusFilter !== 'ALL' ? statusFilter : undefined,
-        source: sourceFilter !== 'ALL' ? sourceFilter : undefined
-      });
-      if (res.data.success) {
-        setLeads(res.data.leads);
-      }
-    } catch (err) {
-      showToast('Failed to load leads from server.', 'error');
-    }
-  };
+const fetchLeads = async () => {
+  try {
+    const res = await leadAPI.getAll({
+      search: search || undefined,
+      status: statusFilter !== 'ALL' ? statusFilter : undefined,
+      source: sourceFilter !== 'ALL' ? sourceFilter : undefined
+    });
+
+    setLeads(res.data);
+  } catch (err) {
+    showToast('Failed to load leads from server.', 'error');
+  }
+};
 
   const fetchAnalytics = async () => {
-    try {
-      const res = await leadAPI.getAnalytics();
-      if (res.data.success) {
-        setAnalytics(res.data.analytics);
-      }
-    } catch (err) {
-      console.error('Failed to load analytics:', err);
-    }
-  };
+  try {
+    const res = await leadAPI.getAnalytics();
+
+    setAnalytics(res.data);
+  } catch (err) {
+    console.error('Failed to load analytics:', err);
+  }
+};
 
   useEffect(() => {
     setLoading(true);
@@ -67,85 +65,103 @@ const Dashboard = () => {
 
   // Open detail drawer for a lead
   const handleSelectLead = async (lead) => {
-    setSelectedLead(lead);
-    setIsDrawerOpen(true);
-    try {
-      const res = await leadAPI.getById(lead.id);
-      if (res.data.success) {
-        setSelectedLead(res.data.lead);
-        setLeadActivities(res.data.activities);
-      }
-    } catch (err) {
-      showToast('Failed to load lead details.', 'error');
-    }
-  };
+  setSelectedLead(lead);
+  setIsDrawerOpen(true);
+
+  try {
+    const res = await leadAPI.getById(lead._id);
+
+    setSelectedLead(res.data.lead);
+    setLeadActivities(res.data.activities || []);
+  } catch (err) {
+    console.error('Failed to load lead details:', err);
+    showToast('Failed to load lead details.', 'error');
+  }
+};
 
   // Status transition
-  const handleUpdateStatus = async (leadId, newStatus) => {
-    try {
-      const res = await leadAPI.updateStatus(leadId, newStatus);
-      if (res.data.success) {
-        showToast(`Status updated to ${newStatus}`);
-        setSelectedLead(res.data.lead);
-        // Refresh activities
-        const detailsRes = await leadAPI.getById(leadId);
-        if (detailsRes.data.success) {
-          setLeadActivities(detailsRes.data.activities);
-        }
-        fetchLeads();
-        fetchAnalytics();
-      }
-    } catch (err) {
-      showToast('Failed to update status.', 'error');
+ const handleUpdateStatus = async (leadId, newStatus) => {
+  try {
+    const res = await leadAPI.updateStatus(leadId, newStatus);
+
+    showToast(`Status updated to ${newStatus}`);
+
+    // Update the selected lead immediately
+    setSelectedLead(res.data.lead);
+
+    // Refresh activity timeline
+    const detailsRes = await leadAPI.getById(leadId);
+
+    if (detailsRes.data.activities) {
+      setLeadActivities(detailsRes.data.activities);
     }
-  };
+
+    // Refresh dashboard data
+    fetchLeads();
+    fetchAnalytics();
+  } catch (err) {
+    console.error('Status update error:', err);
+    showToast('Failed to update status.', 'error');
+  }
+};
 
   // Add follow-up note
   const handleAddNote = async (leadId, noteText) => {
-    try {
-      const res = await leadAPI.addNote(leadId, noteText);
-      if (res.data.success) {
-        showToast('Follow-up note saved');
-        setLeadActivities(res.data.activities);
-        fetchLeads();
-      }
-    } catch (err) {
-      showToast('Failed to add note.', 'error');
-    }
-  };
+  try {
+    const res = await leadAPI.addNote(leadId, noteText);
+
+    showToast(res.data.message || 'Follow-up note saved');
+
+    // Reload the lead activities
+    const detailsRes = await leadAPI.getById(leadId);
+
+    setSelectedLead(detailsRes.data.lead);
+    setLeadActivities(detailsRes.data.activities || []);
+
+    fetchLeads();
+  } catch (err) {
+    console.error('Add note error:', err);
+    showToast('Failed to add note.', 'error');
+  }
+};
 
   // Add lead manually
-  const handleCreateLead = async (leadData) => {
-    try {
-      const res = await leadAPI.create(leadData);
-      if (res.data.success) {
-        showToast('Lead created successfully');
-        setIsAddModalOpen(false);
-        fetchLeads();
-        fetchAnalytics();
-      }
-    } catch (err) {
-      showToast('Failed to create lead.', 'error');
-    }
-  };
+ const handleCreateLead = async (leadData) => {
+  try {
+    const res = await leadAPI.create(leadData);
+
+    showToast(res.data.message || 'Lead created successfully');
+
+    setIsAddModalOpen(false);
+
+    fetchLeads();
+    fetchAnalytics();
+  } catch (err) {
+    console.error('Create lead error:', err);
+    showToast('Failed to create lead.', 'error');
+  }
+};
 
   // Confirm Delete Lead
   const handleConfirmDelete = async () => {
-    if (!deleteConfirmLead) return;
-    try {
-      const res = await leadAPI.delete(deleteConfirmLead.id);
-      if (res.data.success) {
-        showToast(res.data.message || 'Lead deleted');
-        setDeleteConfirmLead(null);
-        setIsDrawerOpen(false);
-        setSelectedLead(null);
-        fetchLeads();
-        fetchAnalytics();
-      }
-    } catch (err) {
-      showToast('Failed to delete lead.', 'error');
-    }
-  };
+  if (!deleteConfirmLead) return;
+
+  try {
+    const res = await leadAPI.delete(deleteConfirmLead._id);
+
+    showToast(res.data.message || 'Lead deleted successfully');
+
+    setDeleteConfirmLead(null);
+    setIsDrawerOpen(false);
+    setSelectedLead(null);
+
+    fetchLeads();
+    fetchAnalytics();
+  } catch (err) {
+    console.error('Delete lead error:', err);
+    showToast('Failed to delete lead.', 'error');
+  }
+};
 
   // Export CSV
   const handleExportCSV = async () => {

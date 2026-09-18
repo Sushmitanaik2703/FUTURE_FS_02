@@ -1,60 +1,98 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { dbAsync } = require('../config/database');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "24h",
+    }
+  );
+};
 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ success: false, error: 'Email and password are required.' });
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
     }
 
-    const user = await dbAsync.get('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    });
 
     if (!user) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials.' });
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials.' });
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
     }
 
-    const secret = process.env.JWT_SECRET || 'super-secret-mini-crm-key-2026';
-    const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.name, role: user.role },
-      secret,
-      { expiresIn: '24h' }
-    );
+    const token = generateToken(user);
 
-    return res.json({
-      success: true,
-      message: 'Login successful',
+    res.json({
+      message: "Login successful",
       token,
       user: {
-        id: user.id,
+        id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (error) {
-    console.error('Login error:', error);
-    return res.status(500).json({ success: false, error: 'Internal server error during authentication.' });
+    console.error("Login error:", error);
+
+    res.status(500).json({
+      message: "Server error during login",
+    });
   }
 };
 
 const getMe = async (req, res) => {
   try {
-    const user = await dbAsync.get('SELECT id, name, email, role, created_at FROM users WHERE id = ?', [req.user.id]);
+    const user = await User.findById(req.user.id).select("-password");
+
     if (!user) {
-      return res.status(444).json({ success: false, error: 'User not found.' });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
-    return res.json({ success: true, user });
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, error: 'Server error fetching user profile.' });
+    console.error("Get current user error:", error);
+
+    res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
-module.exports = { login, getMe };
+module.exports = {
+  login,
+  getMe,
+};

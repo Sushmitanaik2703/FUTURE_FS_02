@@ -1,301 +1,378 @@
-const { dbAsync } = require('../config/database');
+const Lead = require("../models/Lead");
+const LeadActivity = require("../models/LeadActivity");
 
-// Public lead submission from website contact form
+// Public contact form submission
 const publicSubmit = async (req, res) => {
   try {
-    const { name, email, phone, company, message, source } = req.body;
-    const leadSource = source || 'Website Form';
+    const {
+      name,
+      email,
+      phone = "",
+      company = "",
+      message = "",
+      source = "Website Form",
+    } = req.body;
 
-    const result = await dbAsync.run(
-      `INSERT INTO leads (name, email, phone, company, source, status, message)
-       VALUES (?, ?, ?, ?, ?, 'NEW', ?)`,
-      [name.trim(), email.trim(), phone ? phone.trim() : null, company ? company.trim() : null, leadSource, message.trim()]
-    );
+    const lead = await Lead.create({
+      name,
+      email,
+      phone,
+      company,
+      message,
+      source,
+      status: "NEW",
+    });
 
-    const leadId = result.lastID;
+    await LeadActivity.create({
+      leadId: lead._id,
+      type: "created",
+      details: "Lead created through public contact form",
+    });
 
-    // Record initial activity event
-    await dbAsync.run(
-      `INSERT INTO lead_activities (lead_id, activity_type, description, created_by)
-       VALUES (?, 'CREATED', ?, 'Website Visitor')`,
-      [leadId, `Lead submitted via ${leadSource}: "${message.trim()}"`]
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: 'Thank you! Your message has been received. We will contact you shortly.',
-      leadId
+    res.status(201).json({
+      message: "Lead submitted successfully",
+      lead,
     });
   } catch (error) {
-    console.error('Public lead submission error:', error);
-    return res.status(500).json({ success: false, error: 'Failed to process lead submission.' });
+    console.error("Public lead submission error:", error);
+
+    res.status(500).json({
+      message: "Failed to submit lead",
+    });
   }
 };
 
-// Admin: Get all leads with search & filtering
+// Get all leads
 const getAllLeads = async (req, res) => {
   try {
-    const { search, status, source } = req.query;
+    const {
+      search = "",
+      status = "",
+      source = "",
+    } = req.query;
 
-    let sql = `SELECT * FROM leads WHERE 1=1`;
-    const params = [];
+    const filter = {};
 
-    if (search) {
-      sql += ` AND (name LIKE ? OR email LIKE ? OR company LIKE ? OR message LIKE ?)`;
-      const term = `%${search.trim()}%`;
-      params.push(term, term, term, term);
+    if (search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+
+      filter.$or = [
+        { name: regex },
+        { email: regex },
+        { company: regex },
+        { message: regex },
+      ];
     }
 
-    if (status && status !== 'ALL') {
-      sql += ` AND status = ?`;
-      params.push(status.toUpperCase());
+    if (status) {
+      filter.status = status;
     }
 
-    if (source && source !== 'ALL') {
-      sql += ` AND source = ?`;
-      params.push(source);
+    if (source) {
+      filter.source = source;
     }
 
-    sql += ` ORDER BY created_at DESC`;
+    const leads = await Lead.find(filter).sort({
+      createdAt: -1,
+    });
 
-    const leads = await dbAsync.all(sql, params);
-    return res.json({ success: true, count: leads.length, leads });
+    res.json(leads);
   } catch (error) {
-    console.error('Error fetching leads:', error);
-    return res.status(500).json({ success: false, error: 'Failed to fetch leads.' });
+    console.error("Get leads error:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch leads",
+    });
   }
 };
 
-// Admin: Get single lead by ID with activity timeline history
+// Get single lead with activity timeline
 const getLeadById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const lead = await dbAsync.get(`SELECT * FROM leads WHERE id = ?`, [id]);
+    const lead = await Lead.findById(id);
+
     if (!lead) {
-      return res.status(404).json({ success: false, error: 'Lead not found.' });
+      return res.status(404).json({
+        message: "Lead not found",
+      });
     }
 
-    const activities = await dbAsync.all(
-      `SELECT * FROM lead_activities WHERE lead_id = ? ORDER BY created_at DESC`,
-      [id]
-    );
+    const activities = await LeadActivity.find({
+      leadId: lead._id,
+    }).sort({
+      createdAt: -1,
+    });
 
-    return res.json({
-      success: true,
+    res.json({
       lead,
-      activities
+      activities,
     });
   } catch (error) {
-    console.error('Error fetching lead details:', error);
-    return res.status(500).json({ success: false, error: 'Failed to fetch lead details.' });
+    console.error("Get lead error:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch lead",
+    });
   }
 };
 
-// Admin: Create new lead manually
+// Create lead manually
 const createLead = async (req, res) => {
   try {
-    const { name, email, phone, company, source, status, message } = req.body;
-    const initialStatus = (status || 'NEW').toUpperCase();
-    const leadSource = source || 'Manual Entry';
+    const {
+      name,
+      email,
+      phone = "",
+      company = "",
+      source = "Manual",
+      status = "NEW",
+      message = "",
+    } = req.body;
 
-    const result = await dbAsync.run(
-      `INSERT INTO leads (name, email, phone, company, source, status, message)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [name.trim(), email.trim(), phone ? phone.trim() : null, company ? company.trim() : null, leadSource, initialStatus, message ? message.trim() : '']
-    );
+    const lead = await Lead.create({
+      name,
+      email,
+      phone,
+      company,
+      source,
+      status,
+      message,
+    });
 
-    const leadId = result.lastID;
-    const author = req.user ? req.user.name : 'Admin';
+    await LeadActivity.create({
+      leadId: lead._id,
+      type: "created",
+      details: "Lead created manually by admin",
+    });
 
-    await dbAsync.run(
-      `INSERT INTO lead_activities (lead_id, activity_type, description, created_by)
-       VALUES (?, 'CREATED', ?, ?)`,
-      [leadId, `Lead manually created by ${author}`, author]
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: 'Lead created successfully',
-      leadId
+    res.status(201).json({
+      message: "Lead created successfully",
+      lead,
     });
   } catch (error) {
-    console.error('Error creating lead:', error);
-    return res.status(500).json({ success: false, error: 'Failed to create lead.' });
+    console.error("Create lead error:", error);
+
+    res.status(500).json({
+      message: "Failed to create lead",
+    });
   }
 };
 
-// Admin: Update lead status
+// Update lead status
 const updateLeadStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const lead = await dbAsync.get(`SELECT status FROM leads WHERE id = ?`, [id]);
+    const lead = await Lead.findById(id);
+
     if (!lead) {
-      return res.status(404).json({ success: false, error: 'Lead not found.' });
+      return res.status(404).json({
+        message: "Lead not found",
+      });
     }
 
     const oldStatus = lead.status;
-    const newStatus = status.toUpperCase();
 
-    if (oldStatus === newStatus) {
-      return res.json({ success: true, message: 'Status is unchanged.', lead });
-    }
+    lead.status = status;
+    await lead.save();
 
-    await dbAsync.run(
-      `UPDATE leads SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newStatus, id]
-    );
+    await LeadActivity.create({
+      leadId: lead._id,
+      type: "status",
+      details: `Status changed from ${oldStatus} to ${status}`,
+    });
 
-    const author = req.user ? req.user.name : 'Admin';
-
-    // Log status change activity
-    await dbAsync.run(
-      `INSERT INTO lead_activities (lead_id, activity_type, description, created_by)
-       VALUES (?, 'STATUS_CHANGE', ?, ?)`,
-      [id, `Status updated: ${oldStatus} → ${newStatus}`, author]
-    );
-
-    const updatedLead = await dbAsync.get(`SELECT * FROM leads WHERE id = ?`, [id]);
-
-    return res.json({
-      success: true,
-      message: `Status updated to ${newStatus}`,
-      lead: updatedLead
+    res.json({
+      message: "Lead status updated successfully",
+      lead,
     });
   } catch (error) {
-    console.error('Error updating lead status:', error);
-    return res.status(500).json({ success: false, error: 'Failed to update lead status.' });
+    console.error("Update status error:", error);
+
+    res.status(500).json({
+      message: "Failed to update lead status",
+    });
   }
 };
 
-// Admin: Add follow-up note activity
+// Add follow-up note
 const addLeadNote = async (req, res) => {
   try {
     const { id } = req.params;
     const { note } = req.body;
 
-    const lead = await dbAsync.get(`SELECT id FROM leads WHERE id = ?`, [id]);
+    const lead = await Lead.findById(id);
+
     if (!lead) {
-      return res.status(404).json({ success: false, error: 'Lead not found.' });
+      return res.status(404).json({
+        message: "Lead not found",
+      });
     }
 
-    const author = req.user ? req.user.name : 'Admin';
+    await LeadActivity.create({
+      leadId: lead._id,
+      type: "note",
+      note,
+      details: "Follow-up note added",
+    });
 
-    await dbAsync.run(
-      `INSERT INTO lead_activities (lead_id, activity_type, description, created_by)
-       VALUES (?, 'NOTE_ADDED', ?, ?)`,
-      [id, note.trim(), author]
-    );
+    lead.updatedAt = new Date();
+    await lead.save();
 
-    // Touch lead updated_at
-    await dbAsync.run(`UPDATE leads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
-
-    const activities = await dbAsync.all(
-      `SELECT * FROM lead_activities WHERE lead_id = ? ORDER BY created_at DESC`,
-      [id]
-    );
-
-    return res.json({
-      success: true,
-      message: 'Follow-up note added successfully',
-      activities
+    res.json({
+      message: "Follow-up note added successfully",
     });
   } catch (error) {
-    console.error('Error adding follow-up note:', error);
-    return res.status(500).json({ success: false, error: 'Failed to add follow-up note.' });
+    console.error("Add note error:", error);
+
+    res.status(500).json({
+      message: "Failed to add follow-up note",
+    });
   }
 };
 
-// Admin: Delete lead
+// Delete lead
 const deleteLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const lead = await dbAsync.get(`SELECT id, name FROM leads WHERE id = ?`, [id]);
+    const lead = await Lead.findById(id);
+
     if (!lead) {
-      return res.status(404).json({ success: false, error: 'Lead not found.' });
+      return res.status(404).json({
+        message: "Lead not found",
+      });
     }
 
-    // Delete associated activities first
-    await dbAsync.run(`DELETE FROM lead_activities WHERE lead_id = ?`, [id]);
-    // Delete lead
-    await dbAsync.run(`DELETE FROM leads WHERE id = ?`, [id]);
+    await LeadActivity.deleteMany({
+      leadId: lead._id,
+    });
 
-    return res.json({
-      success: true,
-      message: `Lead "${lead.name}" and associated records deleted successfully.`
+    await Lead.findByIdAndDelete(id);
+
+    res.json({
+      message: "Lead deleted successfully",
     });
   } catch (error) {
-    console.error('Error deleting lead:', error);
-    return res.status(500).json({ success: false, error: 'Failed to delete lead.' });
+    console.error("Delete lead error:", error);
+
+    res.status(500).json({
+      message: "Failed to delete lead",
+    });
   }
 };
 
-// Admin: Get Analytics Overview
+// Analytics
 const getAnalytics = async (req, res) => {
   try {
-    const totalRow = await dbAsync.get(`SELECT COUNT(*) as count FROM leads`);
-    const statusRows = await dbAsync.all(`SELECT status, COUNT(*) as count FROM leads GROUP BY status`);
-    const sourceRows = await dbAsync.all(`SELECT source, COUNT(*) as count FROM leads GROUP BY source`);
+    const totalLeads = await Lead.countDocuments();
 
-    const statusCounts = {
-      NEW: 0,
-      CONTACTED: 0,
-      IN_PROGRESS: 0,
-      CONVERTED: 0,
-      LOST: 0
-    };
+    const statusResults = await Lead.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
 
-    statusRows.forEach(row => {
-      statusCounts[row.status] = row.count;
+    const sourceResults = await Lead.aggregate([
+      {
+        $group: {
+          _id: "$source",
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+    ]);
+
+    const statusCounts = {};
+
+    statusResults.forEach((item) => {
+      statusCounts[item._id] = item.count;
     });
 
-    const totalLeads = totalRow.count || 0;
-    const conversionRate = totalLeads > 0 ? ((statusCounts.CONVERTED / totalLeads) * 100).toFixed(1) : 0;
+    const converted = statusCounts.CONVERTED || 0;
 
-    return res.json({
-      success: true,
-      analytics: {
-        totalLeads,
-        statusCounts,
-        conversionRate: parseFloat(conversionRate),
-        sourceBreakdown: sourceRows
-      }
+    const conversionRate =
+      totalLeads > 0
+        ? Number(((converted / totalLeads) * 100).toFixed(2))
+        : 0;
+
+    res.json({
+      totalLeads,
+      statusCounts,
+      conversionRate,
+      sourceBreakdown: sourceResults.map((item) => ({
+        source: item._id,
+        count: item.count,
+      })),
     });
   } catch (error) {
-    console.error('Analytics error:', error);
-    return res.status(500).json({ success: false, error: 'Failed to generate analytics.' });
+    console.error("Analytics error:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch analytics",
+    });
   }
 };
 
-// Admin: Export Leads to CSV
+// Export leads as CSV
 const exportLeadsCSV = async (req, res) => {
   try {
-    const leads = await dbAsync.all(`SELECT * FROM leads ORDER BY created_at DESC`);
-
-    let csv = 'ID,Name,Email,Phone,Company,Source,Status,Created At,Message\n';
-
-    leads.forEach(lead => {
-      const cleanName = `"${(lead.name || '').replace(/"/g, '""')}"`;
-      const cleanEmail = `"${(lead.email || '').replace(/"/g, '""')}"`;
-      const cleanPhone = `"${(lead.phone || '').replace(/"/g, '""')}"`;
-      const cleanCompany = `"${(lead.company || '').replace(/"/g, '""')}"`;
-      const cleanSource = `"${(lead.source || '').replace(/"/g, '""')}"`;
-      const cleanStatus = `"${(lead.status || '').replace(/"/g, '""')}"`;
-      const cleanCreatedAt = `"${(lead.created_at || '').replace(/"/g, '""')}"`;
-      const cleanMessage = `"${(lead.message || '').replace(/\n/g, ' ').replace(/"/g, '""')}"`;
-
-      csv += `${lead.id},${cleanName},${cleanEmail},${cleanPhone},${cleanCompany},${cleanSource},${cleanStatus},${cleanCreatedAt},${cleanMessage}\n`;
+    const leads = await Lead.find().sort({
+      createdAt: -1,
     });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="leads_export.csv"');
-    return res.status(200).send(csv);
+    const header =
+      "Name,Email,Phone,Company,Source,Status,Message,Created At,Updated At";
+
+    const rows = leads.map((lead) => {
+      const escapeCSV = (value) => {
+        const stringValue = value == null ? "" : String(value);
+
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      };
+
+      return [
+        escapeCSV(lead.name),
+        escapeCSV(lead.email),
+        escapeCSV(lead.phone),
+        escapeCSV(lead.company),
+        escapeCSV(lead.source),
+        escapeCSV(lead.status),
+        escapeCSV(lead.message),
+        escapeCSV(lead.createdAt),
+        escapeCSV(lead.updatedAt),
+      ].join(",");
+    });
+
+    const csv = [header, ...rows].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=leads.csv"
+    );
+
+    res.send(csv);
   } catch (error) {
-    console.error('Export CSV error:', error);
-    return res.status(500).json({ success: false, error: 'Failed to export leads.' });
+    console.error("CSV export error:", error);
+
+    res.status(500).json({
+      message: "Failed to export leads",
+    });
   }
 };
 
@@ -308,5 +385,5 @@ module.exports = {
   addLeadNote,
   deleteLead,
   getAnalytics,
-  exportLeadsCSV
+  exportLeadsCSV,
 };
